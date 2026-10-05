@@ -1,2 +1,8 @@
 #!/bin/sh
+# The upstream project is read-only: never push to it, whatever the remote is called.
+case "$1 $2" in
+  upstream\ *|*snakes-and-ladders-arena*)
+    echo "push refused: upstream (snakes-and-ladders-arena) is read-only" >&2
+    exit 1 ;;
+esac
 exec "$(dirname "$0")/run-gate" prepush "$1" "$2"

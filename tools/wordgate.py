@@ -279,7 +279,8 @@ def mode_prepush(remote="", url=""):
                 ["git", "cat-file", "-e", remote_sha], capture_output=True).returncode == 0:
             rng = [local_sha, "^" + remote_sha]
         else:
-            rng = [local_sha, "--not", "--remotes"]
+            # Only commits already on origin count as checked; upstream's do not.
+            rng = [local_sha, "--not", "--remotes=origin"]
         if obj_type(local_sha) == "tag":
             check_tag(rep, local_sha)
         for sha in git_text("rev-list", *rng).split():
@@ -288,22 +289,30 @@ def mode_prepush(remote="", url=""):
     return rep.finish()
 
 
+OWN_REFS = ["refs/heads", "refs/tags", "refs/remotes/origin"]
+OWN_REVS = ["--branches", "--tags", "--remotes=origin"]
+
+
 def mode_history():
+    """This repository's own history: local branches, tags and origin.
+
+    Other remotes (the read-only upstream) are not part of this project.
+    """
     rep = Report()
-    refs = git_text("for-each-ref", "--format=%(objectname) %(objecttype) %(refname)")
+    refs = git_text("for-each-ref", "--format=%(objectname) %(objecttype) %(refname)", *OWN_REFS)
     for line in refs.splitlines():
         sha, typ, name = line.split(" ", 2)
         rep.check("ref", name)
         if typ == "tag":
             check_tag(rep, sha)
     try:
-        commits = git_text("rev-list", "--all").split()
+        commits = git_text("rev-list", *OWN_REVS).split()
     except subprocess.CalledProcessError:
         commits = []
     for sha in commits:
         check_commit(rep, sha)
     if commits:
-        check_objects(rep, ["--all"])
+        check_objects(rep, OWN_REVS)
     return rep.finish()
 
 
@@ -320,6 +329,16 @@ _GUARDS = [
     (re.compile(r"hookspath"), "changing the git hooks path is not allowed"),
     (re.compile(r"\bcommit\b[^|;&\n]*\s-[a-z]*n"), "bypassing git hooks is not allowed"),
     (re.compile(r"settings(\.local)?\.json"), "touching session settings is not allowed"),
+    (re.compile(r"\bpush\b[^|;&\n]*(?:\bupstream\b|snakes-and-ladders-arena)"),
+     "upstream is read-only"),
+    (re.compile(r"\bremote\b[^|;&\n]*\b(?:set-url|rename|remove|rm)\b[^|;&\n]*\bupstream\b"),
+     "the upstream remote is locked"),
+    (re.compile(r"\bconfig\b[^|;&\n]*remote\.upstream\."), "the upstream remote is locked"),
+    (re.compile(r"\bgh\b(?=[^|;&\n]*snakes-and-ladders-arena)[^|;&\n]*"
+                r"(?:\b(?:create|edit|merge|close|reopen|delete|comment|review|ready|lock"
+                r"|upload|sync|rename|archive|transfer|run|rerun|cancel|enable|disable|set)\b"
+                r"|\s-x\s*(?:post|put|patch|delete)\b|--method|\s-[ff]\s|--field|--raw-field)"),
+     "upstream is read-only"),
     (re.compile(r"(?:\brm\b|\bmv\b|\bchmod\b|\bchown\b|\bchattr\b|\btruncate\b|\bunlink\b"
                 r"|\bcp\b|\btee\b|\bln\b|\bsed\s+-i|>)[^|;&\n]*(?:\.githooks|zxgate|wordgate)"),
      "changing the gate outside its own install step is not allowed"),
@@ -408,6 +427,16 @@ def selftest(verbose=True):
         ("rm -rf .githooks", True), ("cp x /usr/local/lib/zxgate/wordgate.py", True),
         ("git commit -m 'add board'", False), ("git push origin main", False),
         ("python3 tools/wordgate.py tree", False),
+        ("git push upstream main", True),
+        ("git push https://github.com/tuklusan/snakes-and-ladders-arena main", True),
+        ("git remote set-url --push upstream https://x", True),
+        ("git config remote.upstream.pushurl https://x", True),
+        ("gh pr create -r tuklusan/snakes-and-ladders-arena", True),
+        ("gh repo view tuklusan/snakes-and-ladders-arena", False),
+        ("gh api -X POST repos/tuklusan/snakes-and-ladders-arena/issues", True),
+        ("gh api repos/tuklusan/snakes-and-ladders-arena/commits", False),
+        ("git fetch upstream", False), ("git merge upstream/master", False),
+        ("git push origin main", False),
     ]
     for cmd, expect in guard_cases:
         got = any(p.search(cmd.lower()) for p, _ in _GUARDS)

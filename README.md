@@ -47,6 +47,22 @@ python3 tools/wordgate.py selftest   # built-in tests
 Findings are reported by file and line with the term masked, for example
 `README.md:12: banned term #3 (c******)`.
 
+### Upstream is read-only
+
+The upstream project,
+[snakes-and-ladders-arena](https://github.com/tuklusan/snakes-and-ladders-arena),
+is a fetch-only remote. To set it up on a new clone:
+
+```sh
+git remote add upstream https://github.com/tuklusan/snakes-and-ladders-arena
+git remote set-url --push upstream DISABLED-read-only
+git config remote.upstream.tagOpt --no-tags
+```
+
+The `pre-push` hook refuses any push to it, whatever the remote is called.
+Upstream's own history is not scanned. Anything taken from it into this
+repository is scanned like everything else.
+
 ### Making it a merge requirement
 
 The workflow can only report after a push lands. To stop anything reaching
