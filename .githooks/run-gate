@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs the word gate with whichever Python works. Fails closed.
+top=$(git rev-parse --show-toplevel) || exit 1
+for py in python3 python py; do
+  if command -v "$py" >/dev/null 2>&1 && "$py" -c "import sys" >/dev/null 2>&1; then
+    exec "$py" "$top/tools/wordgate.py" "$@"
+  fi
+done
+echo "word gate: no working Python found; refusing to continue" >&2
+exit 1

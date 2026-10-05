@@ -1,0 +1,32 @@
+name: Word gate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Self-test
+        run: python3 tools/wordgate.py selftest
+
+      - name: Files in the tree
+        run: python3 tools/wordgate.py tree
+
+      - name: Every commit, tag, path and blob
+        run: python3 tools/wordgate.py history
+
+      - name: Branch name, pull request title and body
+        env:
+          REF_NAME: ${{ github.head_ref || github.ref_name }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s\n%s\n%s\n' "$REF_NAME" "$PR_TITLE" "$PR_BODY" | python3 tools/wordgate.py stdin metadata
